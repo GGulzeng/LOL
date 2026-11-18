@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TFT 토너먼트 - 커스텀 팀 추첨 &amp; 점수판</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+<style>
+  :root{
+    --navy:#091428; --navy2:#0A1A33; --navy3:#0C2240; --panel:#0E1F3A;
+    --gold:#C8AA6E; --gold-dim:#8a7752; --cyan:#0AC8B9; --cyan-dim:#0a7b73;
+    --champ:#FFD700; --silver:#C9D6E3; --bronze:#CD8032; --danger:#e2555a;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; background:var(--navy); color:#EAF2FF; font-family:'Segoe UI','Malgun Gothic',system-ui,sans-serif; }
+  body{ background:
+      radial-gradient(circle at 15% 0%, rgba(10,200,185,0.10), transparent 40%),
+      radial-gradient(circle at 85% 10%, rgba(200,170,110,0.10), transparent 45%),
+      var(--navy); min-height:100vh; }
+  .hex-border{ border:1px solid rgba(200,170,110,0.35); }
+  .panel{ background:linear-gradient(180deg, rgba(14,31,58,0.9), rgba(9,20,40,0.9)); border:1px solid rgba(200,170,110,0.25); border-radius:14px; box-shadow:0 4px 18px rgba(0,0,0,0.35); }
+  .gold-text{ color:var(--gold); } .cyan-text{ color:var(--cyan); }
+
+  .btn{ font-weight:700; border-radius:10px; padding:10px 18px; transition:all .15s ease; cursor:pointer; border:1px solid transparent; user-select:none; }
+  .btn:active{ transform:scale(0.96); }
+  .btn-gold{ background:linear-gradient(180deg,#E3C98A,#C8AA6E); color:#0A1428; border-color:#8a7752; box-shadow:0 2px 0 #7a6948, 0 0 14px rgba(200,170,110,0.25); }
+  .btn-gold:hover{ filter:brightness(1.08); box-shadow:0 2px 0 #7a6948, 0 0 20px rgba(200,170,110,0.55); }
+  .btn-cyan{ background:linear-gradient(180deg,#36E6D8,#0AC8B9); color:#061a1a; border-color:#0a7b73; box-shadow:0 2px 0 #075b55, 0 0 14px rgba(10,200,185,0.25); }
+  .btn-cyan:hover{ filter:brightness(1.08); box-shadow:0 2px 0 #075b55, 0 0 20px rgba(10,200,185,0.55); }
+  .btn-ghost{ background:rgba(255,255,255,0.05); color:#EAF2FF; border-color:rgba(255,255,255,0.15); }
+  .btn-ghost:hover{ background:rgba(255,255,255,0.1); }
+  .btn-danger{ background:rgba(226,85,90,0.15); color:#ff9a9d; border-color:rgba(226,85,90,0.5); }
+  .btn-danger:hover{ background:rgba(226,85,90,0.28); }
+  .btn:disabled{ opacity:0.35; cursor:not-allowed; filter:none !important; box-shadow:none !important; transform:none !important; }
+  .btn-sm{ padding:6px 12px; font-size:12px; border-radius:8px; }
+
+  .tab-btn{ padding:10px 20px; border-radius:10px 10px 0 0; font-weight:700; cursor:pointer; border:1px solid transparent; }
+  .tab-btn.active{ background:var(--panel); border-color:rgba(200,170,110,0.4); border-bottom-color:transparent; color:var(--gold); }
+  .tab-btn:not(.active){ color:#9fb0c9; }
+  .tab-btn:not(.active):hover{ color:#EAF2FF; }
+
+  textarea, input[type=text], input[type=number], select{ background:rgba(255,255,255,0.04); border:1px solid rgba(200,170,110,0.25); border-radius:8px; color:#EAF2FF; padding:8px; font-size:14px; line-height:1.6; }
+  textarea{ resize:vertical; width:100%; }
+  input[type=text], input[type=number], select{ padding:6px 8px; }
+  textarea:focus, input:focus, select:focus{ outline:none; border-color:var(--cyan); box-shadow:0 0 0 2px rgba(10,200,185,0.25); }
+  input[type=checkbox], input[type=radio]{ accent-color:var(--cyan); width:16px; height:16px; }
+
+  .reel-viewport{ height:64px; overflow:hidden; position:relative; border:2px solid var(--gold); border-radius:10px; background:linear-gradient(180deg,#0A1830,#040B18); box-shadow:inset 0 0 18px rgba(0,0,0,0.6); }
+  .reel-strip{ position:absolute; left:0; top:0; width:100%; will-change:transform; }
+  .reel-item{ height:64px; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:1.2rem; color:#fff; letter-spacing:.5px; padding:0 6px; text-align:center; }
+  .reel-viewport::before, .reel-viewport::after{ content:''; position:absolute; left:0; right:0; height:2px; background:linear-gradient(90deg,transparent,var(--cyan),transparent); z-index:2; }
+  .reel-viewport::before{ top:0; } .reel-viewport::after{ bottom:0; }
+
+  .team-card{ background:rgba(255,255,255,0.04); border:1px solid rgba(200,170,110,0.25); border-radius:12px; padding:10px; transition:all .2s; }
+  .team-card.filled{ border-color:var(--cyan); background:rgba(10,200,185,0.08); }
+  .team-card.empty{ opacity:0.45; border-style:dashed; }
+
+  @keyframes popIn{ 0%{ transform:scale(.6) translateY(10px); opacity:0; } 60%{ transform:scale(1.05); opacity:1; } 100%{ transform:scale(1) translateY(0); opacity:1; } }
+  .pop-in{ animation:popIn .4s ease-out; }
+  @keyframes fadeIn{ from{opacity:0;} to{opacity:1;} }
+  .fade-in{ animation:fadeIn .25s ease-out; }
+
+  .rank-btn{ flex:1 1 56px; min-width:56px; padding:6px 2px; text-align:center; border-radius:8px; font-weight:800; font-size:12px; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.05); color:#cdd8ea; cursor:pointer; }
+  .rank-btn:hover{ background:rgba(255,255,255,0.12); }
+  .rank-btn.sel-1{ background:linear-gradient(180deg,#FFE9A8,var(--champ)); color:#3a2a00; border-color:#b8960a; }
+  .rank-btn.sel-2{ background:linear-gradient(180deg,#E7EEF5,var(--silver)); color:#1a2430; border-color:#9aabbd; }
+  .rank-btn.sel-3{ background:linear-gradient(180deg,#E3A463,var(--bronze)); color:#2a1400; border-color:#8a5420; }
+  .rank-btn.sel-other{ background:rgba(255,255,255,0.22); color:#fff; border-color:rgba(255,255,255,0.4); }
+
+  .group-tag{ font-size:11px; font-weight:800; padding:2px 8px; border-radius:999px; display:inline-block; }
+  .group-tag.g1{ background:rgba(10,200,185,0.18); color:var(--cyan); border:1px solid var(--cyan-dim); }
+  .group-tag.g2{ background:rgba(200,170,110,0.18); color:var(--gold); border:1px solid var(--gold-dim); }
+  .group-tag.g3{ background:rgba(226,85,90,0.18); color:#ff9a9d; border:1px solid rgba(226,85,90,0.5); }
+  .group-tag.g4{ background:rgba(140,140,255,0.18); color:#b8b8ff; border:1px solid rgba(140,140,255,0.5); }
+
+  .lb-row{ display:grid; grid-template-columns:34px minmax(0,1fr) 60px; align-items:center; gap:8px; padding:8px 12px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); margin-bottom:8px; }
+  .lb-row.medal-1{ border-color:var(--champ); background:linear-gradient(90deg,rgba(255,215,0,0.14),rgba(255,255,255,0.03)); }
+  .lb-row.medal-2{ border-color:var(--silver); background:linear-gradient(90deg,rgba(201,214,227,0.14),rgba(255,255,255,0.03)); }
+  .lb-row.medal-3{ border-color:var(--bronze); background:linear-gradient(90deg,rgba(205,128,50,0.14),rgba(255,255,255,0.03)); }
+
+  .field-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
+  .field-label{ font-size:13px; font-weight:700; color:#cdd8ea; }
+  .mode-card{ border:1px solid rgba(255,255,255,0.15); border-radius:10px; padding:10px 12px; cursor:pointer; background:rgba(255,255,255,0.03); }
+  .mode-card.active{ border-color:var(--cyan); background:rgba(10,200,185,0.1); }
+  .mode-card .t{ font-weight:800; font-size:13px; }
+  .mode-card .d{ font-size:11px; color:#9fb0c9; margin-top:2px; }
+
+  #winModalBackdrop{ position:fixed; inset:0; background:rgba(2,6,16,0.75); display:none; align-items:center; justify-content:center; z-index:50; }
+  #winModal{ background:linear-gradient(180deg,#132848,#081225); border:2px solid var(--gold); border-radius:18px; padding:32px 48px; text-align:center; box-shadow:0 0 60px rgba(200,170,110,0.4); max-width:90vw; }
+</style>
+</head>
+<body>
+
+<div class="max-w-[1800px] mx-auto px-4 py-4">
+
+  <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-full flex items-center justify-center" style="background:linear-gradient(135deg,var(--gold),var(--cyan)); font-weight:900; color:#0A1428;">TFT</div>
+      <h1 class="text-2xl font-black"><span class="gold-text">커스텀</span> <span class="cyan-text">토너먼트</span> 대시보드</h1>
+    </div>
+    <button class="btn btn-danger" onclick="resetAll()">⟲ 전체 초기화</button>
+  </div>
+
+  <div class="flex gap-2 border-b" style="border-color:rgba(200,170,110,0.25);">
+    <div id="tabBtnSettings" class="tab-btn" onclick="setPage('settings')">⚙ 설정</div>
+    <div id="tabBtnDraw" class="tab-btn" onclick="setPage('draw')">🎰 팀 추첨</div>
+    <div id="tabBtnScore" class="tab-btn" onclick="setPage('score')">🏆 점수판 &amp; 순위표</div>
+  </div>
+
+  <div id="pageSettings" class="panel rounded-t-none p-5"></div>
+  <div id="pageDraw" class="panel rounded-t-none p-5"></div>
+  <div id="pageScore" class="panel rounded-t-none p-5"></div>
+
+</div>
+
+<div id="winModalBackdrop">
+  <div id="winModal" class="pop-in">
+    <div class="text-sm cyan-text font-bold mb-1">TEAM MATCH COMPLETE</div>
+    <div id="winModalTitle" class="text-3xl font-black gold-text mb-3">Team 1 매칭 완료!</div>
+    <div id="winModalBody" class="text-lg font-bold"></div>
+    <button class="btn btn-gold mt-5" onclick="closeWinModal()">확인</button>
+  </div>
+</div>
+
+<script>
+const LS_KEY = 'tftCustomTournament_v2';
+const ITEM_H = 64;
+const SPIN_DURATION = 2800;
+
+const DEFAULT_NAME_POOL = [
+  '아칼리','가렌','럭스','징크스','야스오','세라핀','자야','리븐',
+  '블리츠크랭크','문도박사','카직스','이즈리얼','쓰레쉬','모르가나','케이틀린','다리우스',
+  '아리','리신','그레이브즈','레오나','바이','피즈','진','알리스타',
+  '제드','베인','소나','탈론','니달리','브라움','코그모','룰루'
+];
+
+function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+function pickRandom(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function shuffle(arr){
+  const a=[...arr];
+  for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function defaultPointsForCount(n){
+  const p = {};
+  for(let r=1; r<=n; r++) p[r] = Math.max(0, n-r);
+  return p;
+}
+function defaultConfig(){
+  return {
+    teamSize: 2,
+    matchType: 'tiered',
+    teamCount: 8,
+    rounds: [
+      { id:1, label:'1라운드', useGroups:true, groupCount:2, groupMode:'manual', points: defaultPointsForCount(4) },
+      { id:2, label:'2라운드', useGroups:true, groupCount:2, groupMode:'manual', points: defaultPointsForCount(4) },
+      { id:3, label:'3라운드', useGroups:true, groupCount:2, groupMode:'auto',   points: {1:5,2:3,3:1,4:0} }
+    ]
+  };
+}
+
+function defaultState(){
+  const st = {
+    page: 'settings',
+    config: defaultConfig(),
+    names: { tier1:[], tier2:[], pool:[] },
+    remaining: { tier1:[], tier2:[], pool:[] },
+    teams: [],
+    groups: {},
+    scores: {},
+    rulesOpen: false
+  };
+  applyNameSlots(st, false);
+  return st;
+}
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      const def = defaultState();
+      return Object.assign(def, parsed);
+    }
+  }catch(e){ console.warn('state load failed', e); }
+  return defaultState();
+}
+
+let spinning = false;
+let audioCtx = null;
+let nameCounter = 0;
+let state = loadState();
+
+function saveState(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(e){ console.warn('save failed', e); }
+}
+
+function resetAll(){
+  if(!confirm('전체 설정, 명단, 팀 편성, 점수가 모두 초기화됩니다.\n되돌릴 수 없습니다. 계속할까요?')) return;
+  localStorage.removeItem(LS_KEY);
+  state = defaultState();
+  render();
+}
+
+/* ================= NAME SLOT MANAGEMENT ================= */
+function nextDefaultName(){
+  const n = DEFAULT_NAME_POOL[nameCounter % DEFAULT_NAME_POOL.length];
+  const cycle = Math.floor(nameCounter / DEFAULT_NAME_POOL.length);
+  nameCounter++;
+  return cycle>0 ? n+'('+(cycle+1)+')' : n;
+}
+
+function applyNameSlots(st, preserveExisting){
+  const tc = st.config.teamCount;
+  let flat = [];
+  if(preserveExisting){
+    flat = [...st.names.tier1, ...st.names.tier2, ...st.names.pool].filter(Boolean);
+  }
+  nameCounter = 0;
+  function buildList(count, offset){
+    const res = [];
+    for(let i=0;i<count;i++){
+      const existing = flat[offset+i];
+      res.push(existing ? existing : nextDefaultName());
+    }
+    return res;
+  }
+  if(st.config.teamSize === 1){
+    st.names = { tier1:[], tier2:[], pool: buildList(tc, 0) };
+  } else if(st.config.matchType === 'tiered'){
+    st.names = { tier1: buildList(tc,0), tier2: buildList(tc, tc), pool: [] };
+  } else {
+    st.names = { tier1:[], tier2:[], pool: buildList(tc*2, 0) };
+  }
+  resetRemainingFromNames(st);
+}
+
+function resetRemainingFromNames(st){
+  const used = st.teams.flatMap(t=>t.members);
+  st.remaining = {
+    tier1: st.names.tier1.filter(n=>!used.includes(n)),
+    tier2: st.names.tier2.filter(n=>!used.includes(n)),
+    pool: st.names.pool.filter(n=>!used.includes(n))
+  };
+}
+
+function hasProgress(){ return state.teams.length > 0; }
+function clearDraftAndScores(){ state.teams=[]; state.groups={}; state.scores={}; }
+
+function drawMode(){
+  if(state.config.teamSize === 1) return 'solo';
+  return state.config.matchType === 'tiered' ? 'tiered' : 'randomDuo';
+}
+function rankCountForRound(round){
+  const gc = round.useGroups ? round.groupCount : 1;
+  return Math.ceil(state.config.teamCount / gc);
+}
+
+/* ================= NAV ================= */
+function setPage(p){ state.page = p; saveState(); render(); }
+
+function render(){
+  document.getElementById('tabBtnSettings').classList.toggle('active', state.page==='settings');
+  document.getElementById('tabBtnDraw').classList.toggle('active', state.page==='draw');
+  document.getElementById('tabBtnScore').classList.toggle('active', state.page==='score');
+  document.getElementById('pageSettings').style.display = state.page==='settings' ? 'block':'none';
+  document.getElementById('pageDraw').style.display = state.page==='draw' ? 'block':'none';
+  document.getElementById('pageScore').style.display = state.page==='score' ? 'block':'none';
+  renderSettings();
+  renderDraw();
+  renderScore();
+}
+
+/* ================= AUDIO ================= */
+function ensureAudio(){
+  if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if(audioCtx.state === 'suspended') audioCtx.resume();
+}
+function tickSound(){
+  ensureAudio();
+  const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+  o.type='square'; o.frequency.value = 1100 + Math.random()*200; g.gain.value=0.045;
+  o.connect(g); g.connect(audioCtx.destination);
+  const t0=audioCtx.currentTime;
+  g.gain.setValueAtTime(0.045,t0); g.gain.exponentialRampToValueAtTime(0.0001,t0+0.09);
+  o.start(t0); o.stop(t0+0.1);
+}
+function playTicks(duration){
+  ensureAudio();
+  const start=Date.now(); let delay=70;
+  function loop(){
+    if(Date.now()-start > duration-150) return;
+    tickSound(); delay=Math.min(delay+6,220); setTimeout(loop,delay);
+  }
+  loop();
+}
+function playFanfare(){
+  ensureAudio();
+  const notes=[523.25,659.25,784.0,1046.5];
+  notes.forEach((f,i)=>{
+    const o=audioCtx.createOscillator(); const g=audioCtx.createGain();
+    o.type='triangle'; o.frequency.value=f; o.connect(g); g.connect(audioCtx.destination);
+    const t0=audioCtx.currentTime+i*0.11;
+    g.gain.setValueAtTime(0.09,t0); g.gain.exponentialRampToValueAtTime(0.0001,t0+0.55);
+    o.start(t0); o.stop(t0+0.56);
+  });
+}
+function burstConfetti(){
+  if(typeof confetti !== 'function') return;
+  confetti({ particleCount:120, spread:75, origin:{y:0.6}, colors:['#C8AA6E','#0AC8B9','#ffffff','#FFD700'] });
+  setTimeout(()=>confetti({ particleCount:60, spread:100, origin:{y:0.5}, colors:['#C8AA6E','#0AC8B9'] }), 200);
+}
+
+/* ================= SETTINGS PAGE ================= */
+function renderSettings(){
+  const el = document.getElementById('pageSettings');
+  const c = state.config;
+  const mode = c.teamSize===1 ? 'solo' : (c.matchType==='tiered' ? 'tiered' : 'random');
+  const totalParticipants = c.teamCount * (c.teamSize===1?1:2);
+
+  const modeCardsHtml = `
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      <div class="mode-card ${mode==='tiered'?'active':''}" onclick="setMatchMode('tiered')">
+        <div class="t cyan-text">더블업 · 티어 구분</div>
+        <div class="d">1티어 풀 + 2티어 풀에서 각각 1명씩 뽑아 팀 구성</div>
+      </div>
+      <div class="mode-card ${mode==='random'?'active':''}" onclick="setMatchMode('random')">
+        <div class="t cyan-text">더블업 · 전체 랜덤</div>
+        <div class="d">티어 구분 없이 전체 명단에서 2명씩 랜덤으로 묶어 팀 구성</div>
+      </div>
+      <div class="mode-card ${mode==='solo'?'active':''}" onclick="setMatchMode('solo')">
+        <div class="t cyan-text">솔로 (1인 참가)</div>
+        <div class="d">팀 없이 1명 = 1참가자로 바로 추첨 진행</div>
+      </div>
+    </div>
+  `;
+
+  const roundsHtml = c.rounds.map((r, idx)=>{
+    const rankCount = rankCountForRound(r);
+    const pointsHtml = Array.from({length:rankCount}, (_,i)=>i+1).map(rank=>`
+      <div class="flex items-center gap-1">
+        <span class="text-xs text-gray-400 w-10">${rank}등</span>
+        <input type="number" class="w-16" value="${r.points[rank] ?? 0}" min="0"
+          onchange="updateRoundPoint(${r.id}, ${rank}, this.value)">
+      </div>
+    `).join('');
+
+    return `
+      <div class="hex-border rounded-xl p-4">
+        <div class="flex items-center justify-between mb-2 gap-2 flex-wrap">
+          <input type="text" class="font-bold text-sm" style="width:120px;" value="${escapeHtml(r.label)}"
+            onchange="updateRoundField(${r.id}, 'label', this.value)">
+          <button class="btn btn-ghost btn-sm" onclick="resetRoundPoints(${r.id})">배점 기본값 재설정</button>
+        </div>
+
+        <label class="field-row">
+          <span class="field-label">조 편성 사용</span>
+          <input type="checkbox" ${r.useGroups?'checked':''} onchange="updateRoundField(${r.id}, 'useGroups', this.checked)">
+        </label>
+
+        ${r.useGroups ? `
+          <label class="field-row">
+            <span class="field-label">조 개수</span>
+            <input type="number" style="width:70px;" min="1" max="${c.teamCount}" value="${r.groupCount}"
+              onchange="updateRoundField(${r.id}, 'groupCount', this.value)">
+          </label>
+          <label class="field-row">
+            <span class="field-label">조 배정 방식</span>
+            <select onchange="updateRoundField(${r.id}, 'groupMode', this.value)">
+              <option value="manual" ${r.groupMode==='manual'?'selected':''}>수동 배정</option>
+              <option value="auto" ${r.groupMode==='auto'?'selected':''}>자동 편성 (이전 라운드 누적 순위 기준)</option>
+            </select>
+          </label>
+        ` : `<div class="text-xs text-gray-400 mb-2">전체 ${c.teamCount}팀이 한 번에 경쟁합니다.</div>`}
+
+        <div class="text-xs text-gray-400 mb-1 mt-2">배점표 (등수별 점수)</div>
+        <div class="flex flex-wrap gap-2">${pointsHtml}</div>
+      </div>
+    `;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div class="hex-border rounded-xl p-4">
+        <div class="text-sm font-bold gold-text mb-2">매칭 방식</div>
+        ${modeCardsHtml}
+      </div>
+      <div class="hex-border rounded-xl p-4">
+        <div class="text-sm font-bold gold-text mb-2">인원 / 라운드 설정</div>
+        <label class="field-row">
+          <span class="field-label">참가 팀(또는 인원) 수</span>
+          <input type="number" style="width:80px;" min="2" max="24" value="${c.teamCount}" onchange="updateTeamCount(this.value)">
+        </label>
+        <div class="text-xs text-gray-400 mb-2">총 참가 인원: ${totalParticipants}명 ${mode==='solo' ? '(개인전)' : '(2인 1팀)'}</div>
+        <label class="field-row">
+          <span class="field-label">라운드 수</span>
+          <input type="number" style="width:80px;" min="1" max="6" value="${c.rounds.length}" onchange="updateRoundCount(this.value)">
+        </label>
+      </div>
+    </div>
+
+    <div class="mt-5">
+      <div class="text-sm font-bold gold-text mb-2">라운드별 설정</div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">${roundsHtml}</div>
+    </div>
+
+    <button class="btn btn-cyan w-full text-lg py-3 mt-5" onclick="setPage('draw')">🎰 설정 완료, 팀 추첨하러 가기 →</button>
+  `;
+}
+
+function setMatchMode(mode){
+  const newTeamSize = mode==='solo' ? 1 : 2;
+  const newMatchType = mode==='random' ? 'random' : 'tiered';
+  if(newTeamSize===state.config.teamSize && newMatchType===state.config.matchType) return;
+  if(hasProgress() && !confirm('매칭 방식을 변경하면 현재 추첨된 팀과 점수가 모두 초기화됩니다. 계속할까요?')) return;
+  state.config.teamSize = newTeamSize;
+  state.config.matchType = newMatchType;
+  clearDraftAndScores();
+  applyNameSlots(state, true);
+  saveState(); render();
+}
+
+function updateTeamCount(v){
+  v = clamp(parseInt(v)||2, 2, 24);
+  if(v === state.config.teamCount){ render(); return; }
+  if(hasProgress() && !confirm('인원/팀 수를 변경하면 현재 추첨된 팀과 점수가 모두 초기화됩니다. 계속할까요?')){ render(); return; }
+  state.config.teamCount = v;
+  clearDraftAndScores();
+  state.config.rounds.forEach(r=>{
+    r.groupCount = clamp(r.groupCount, 1, v);
+    r.points = defaultPointsForCount(rankCountForRound(r));
+  });
+  applyNameSlots(state, true);
+  saveState(); render();
+}
+
+function updateRoundCount(v){
+  v = clamp(parseInt(v)||1, 1, 6);
+  const rounds = state.config.rounds;
+  if(v < rounds.length){
+    const removed = rounds.splice(v);
+    removed.forEach(r=>{ delete state.scores[r.id]; delete state.groups[r.id]; });
+  } else if(v > rounds.length){
+    for(let i=rounds.length;i<v;i++){
+      const newId = rounds.length ? Math.max(...state.config.rounds.map(r=>r.id), ...rounds.map(r=>r.id)) + 1 : 1;
+      rounds.push({ id:newId, label:(i+1)+'라운드', useGroups:true, groupCount: Math.min(2, state.config.teamCount), groupMode:'manual', points: defaultPointsForCount(Math.ceil(state.config.teamCount/Math.min(2,state.config.teamCount))) });
+    }
+  }
+  saveState(); render();
+}
+
+function updateRoundField(id, field, value){
+  const round = state.config.rounds.find(r=>r.id===id);
+  if(!round) return;
+  if(field==='label'){
+    round.label = value || round.label;
+  } else if(field==='useGroups'){
+    round.useGroups = value;
+    delete state.groups[id]; delete state.scores[id];
+    round.points = defaultPointsForCount(rankCountForRound(round));
+  } else if(field==='groupCount'){
+    round.groupCount = clamp(parseInt(value)||1, 1, state.config.teamCount);
+    delete state.groups[id]; delete state.scores[id];
+    round.points = defaultPointsForCount(rankCountForRound(round));
+  } else if(field==='groupMode'){
+    round.groupMode = value;
+    delete state.groups[id];
+  }
+  saveState(); render();
+}
+
+function updateRoundPoint(id, rank, value){
+  const round = state.config.rounds.find(r=>r.id===id);
+  if(!round) return;
+  round.points[rank] = Math.max(0, parseInt(value)||0);
+  saveState(); render();
+}
+
+function resetRoundPoints(id){
+  const round = state.config.rounds.find(r=>r.id===id);
+  if(!round) return;
+  round.points = defaultPointsForCount(rankCountForRound(round));
+  saveState(); render();
+}
+
+/* ================= DRAW PAGE ================= */
+function renderDraw(){
+  const el = document.getElementById('pageDraw');
+  const mode = drawMode();
+  const teamCount = state.teams.length;
+  const targetCount = state.config.teamCount;
+
+  let nameInputHtml = '';
+  if(mode==='tiered'){
+    nameInputHtml = `
+      <div>
+        <label class="text-sm font-bold cyan-text">1티어 명단 (${targetCount}명, 한 줄에 한 명)</label>
+        <textarea id="nameInputTier1" rows="8" class="w-full mt-1">${state.names.tier1.join('\n')}</textarea>
+        <button class="btn btn-cyan w-full mt-1 text-sm" onclick="applyNamesTier(1)">1티어 명단 적용</button>
+      </div>
+      <div class="mt-3">
+        <label class="text-sm font-bold gold-text">2티어 명단 (${targetCount}명, 한 줄에 한 명)</label>
+        <textarea id="nameInputTier2" rows="8" class="w-full mt-1">${state.names.tier2.join('\n')}</textarea>
+        <button class="btn btn-gold w-full mt-1 text-sm" onclick="applyNamesTier(2)">2티어 명단 적용</button>
+      </div>
+    `;
+  } else {
+    const need = mode==='randomDuo' ? targetCount*2 : targetCount;
+    nameInputHtml = `
+      <div>
+        <label class="text-sm font-bold cyan-text">참가자 명단 (${need}명, 한 줄에 한 명)</label>
+        <textarea id="nameInputPool" rows="16" class="w-full mt-1">${state.names.pool.join('\n')}</textarea>
+        <button class="btn btn-cyan w-full mt-1 text-sm" onclick="applyNamesPool()">명단 적용</button>
+      </div>
+    `;
+  }
+
+  const remainingLabel = mode==='tiered'
+    ? `남은 1티어 ${state.remaining.tier1.length}명 · 남은 2티어 ${state.remaining.tier2.length}명`
+    : `남은 참가자 ${state.remaining.pool.length}명`;
+
+  const reelsHtml = mode==='solo' ? `
+    <div class="w-full max-w-[220px]">
+      <div class="text-xs cyan-text font-bold mb-1 text-center">참가자</div>
+      <div class="reel-viewport" id="reel1"><div class="reel-strip" id="reel1Strip"></div></div>
+    </div>
+  ` : `
+    <div class="grid grid-cols-2 gap-4 w-full max-w-[460px]">
+      <div>
+        <div class="text-xs cyan-text font-bold mb-1 text-center">${mode==='tiered'?'1 TIER':'참가자 A'}</div>
+        <div class="reel-viewport" id="reel1"><div class="reel-strip" id="reel1Strip"></div></div>
+      </div>
+      <div>
+        <div class="text-xs gold-text font-bold mb-1 text-center">${mode==='tiered'?'2 TIER':'참가자 B'}</div>
+        <div class="reel-viewport" id="reel2"><div class="reel-strip" id="reel2Strip"></div></div>
+      </div>
+    </div>
+  `;
+
+  let teamCardsHtml = '';
+  for(let i=1;i<=targetCount;i++){
+    const t = state.teams.find(x=>x.id===i);
+    if(t){
+      teamCardsHtml += `
+        <div class="team-card filled" data-newteam="${i}">
+          <div class="text-xs cyan-text font-bold mb-1">TEAM ${i}</div>
+          ${t.members.map((m,mi)=>`<div class="text-sm font-bold ${mi===0?'':'gold-text'}">${mi===0?'🥇':'🥈'} ${escapeHtml(m)}</div>`).join('')}
+        </div>`;
+    } else {
+      teamCardsHtml += `
+        <div class="team-card empty">
+          <div class="text-xs text-gray-400 font-bold mb-1">TEAM ${i}</div>
+          <div class="text-sm text-gray-500">대기중...</div>
+        </div>`;
+    }
+  }
+
+  el.innerHTML = `
+    <div class="grid grid-cols-1 lg:grid-cols-[320px_1fr_340px] gap-5">
+      <div class="space-y-2">${nameInputHtml}
+        <p class="text-xs text-gray-400 leading-relaxed">※ 텍스트 영역에 명단을 직접 수정하거나 붙여넣은 뒤 '적용' 버튼을 누르세요. 이미 추첨된 참가자는 후보 풀에서 자동 제외됩니다.</p>
+      </div>
+
+      <div class="flex flex-col items-center justify-start gap-4">
+        <div class="text-center">
+          <div class="text-lg font-black gold-text">듀얼 룰렛 추첨기</div>
+          <div class="text-xs text-gray-400">${remainingLabel}</div>
+        </div>
+        ${reelsHtml}
+        <button id="spinBtn" class="btn btn-gold text-lg px-10 py-3 mt-2" onclick="spinOnce()" ${teamCount>=targetCount?'disabled':''}>🎰 팀 추첨하기 (SPIN)</button>
+        <button class="btn btn-ghost text-sm" onclick="autoMatchRemaining()" ${teamCount>=targetCount?'disabled':''}>⚡ 남은 팀 일괄 자동 매칭</button>
+
+        <div class="w-full mt-2">
+          <div class="h-2 w-full rounded-full bg-white/10 overflow-hidden">
+            <div class="h-full rounded-full" style="width:${(teamCount/targetCount*100)}%; background:linear-gradient(90deg,var(--cyan),var(--gold));"></div>
+          </div>
+          <div class="text-center text-sm mt-1 font-bold">${teamCount} / ${targetCount} 팀 매칭 완료</div>
+        </div>
+
+        <button class="btn btn-cyan w-full text-lg py-3 mt-1" onclick="goToScoreboard()" ${teamCount<targetCount?'disabled':''}>
+          🏆 대회 시작 (점수판으로 이동) →
+        </button>
+      </div>
+
+      <div>
+        <div class="text-sm font-bold gold-text mb-2">완성된 팀 리스트</div>
+        <div class="grid grid-cols-2 gap-2 max-h-[560px] overflow-y-auto pr-1 scrollbar-thin" id="teamListGrid">
+          ${teamCardsHtml}
+        </div>
+      </div>
+    </div>
+  `;
+
+  const idlePool1 = mode==='tiered' ? state.remaining.tier1 : state.remaining.pool;
+  renderIdleReel('reel1Strip', idlePool1.length ? idlePool1 : ['---']);
+  if(mode!=='solo'){
+    const idlePool2 = mode==='tiered' ? state.remaining.tier2 : state.remaining.pool;
+    renderIdleReel('reel2Strip', idlePool2.length ? idlePool2 : ['---']);
+  }
+
+  if(teamCount>0){
+    const lastCard = el.querySelector(`[data-newteam="${teamCount}"]`);
+    if(lastCard) lastCard.classList.add('pop-in');
+  }
+}
+
+function renderIdleReel(stripId, pool){
+  const strip = document.getElementById(stripId);
+  if(!strip) return;
+  strip.style.transition='none'; strip.style.transform='translateY(0)';
+  strip.innerHTML = `<div class="reel-item">${escapeHtml(pool[Math.floor(Math.random()*pool.length)])}</div>`;
+}
+
+function applyNamesTier(tier){
+  const ta = document.getElementById('nameInputTier'+tier);
+  let lines = ta.value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const count = state.config.teamCount;
+  while(lines.length<count) lines.push('참가자'+(lines.length+1));
+  lines = lines.slice(0,count);
+  state.names['tier'+tier] = lines;
+  resetRemainingFromNames(state);
+  saveState(); renderDraw();
+}
+
+function applyNamesPool(){
+  const ta = document.getElementById('nameInputPool');
+  const required = drawMode()==='solo' ? state.config.teamCount : state.config.teamCount*2;
+  let lines = ta.value.split('\n').map(s=>s.trim()).filter(Boolean);
+  while(lines.length<required) lines.push('참가자'+(lines.length+1));
+  lines = lines.slice(0,required);
+  state.names.pool = lines;
+  resetRemainingFromNames(state);
+  saveState(); renderDraw();
+}
+
+function spinOnce(){
+  if(spinning) return;
+  if(state.teams.length >= state.config.teamCount) return;
+  const mode = drawMode();
+
+  if(mode==='tiered'){
+    if(state.remaining.tier1.length===0 || state.remaining.tier2.length===0){ alert('추첨할 참가자가 남아있지 않습니다.'); return; }
+    spinning=true; document.getElementById('spinBtn').disabled=true;
+    const w1=pickRandom(state.remaining.tier1), w2=pickRandom(state.remaining.tier2);
+    animateReel('reel1Strip', state.remaining.tier1, w1, SPIN_DURATION);
+    animateReel('reel2Strip', state.remaining.tier2, w2, SPIN_DURATION);
+    playTicks(SPIN_DURATION);
+    setTimeout(()=>{ finishDraw([w1,w2]); spinning=false; }, SPIN_DURATION+150);
+  } else if(mode==='randomDuo'){
+    if(state.remaining.pool.length<2){ alert('추첨할 참가자가 부족합니다.'); return; }
+    spinning=true; document.getElementById('spinBtn').disabled=true;
+    const w1=pickRandom(state.remaining.pool);
+    const rest=state.remaining.pool.filter(n=>n!==w1);
+    const w2=pickRandom(rest);
+    animateReel('reel1Strip', state.remaining.pool, w1, SPIN_DURATION);
+    animateReel('reel2Strip', state.remaining.pool, w2, SPIN_DURATION);
+    playTicks(SPIN_DURATION);
+    setTimeout(()=>{ finishDraw([w1,w2]); spinning=false; }, SPIN_DURATION+150);
+  } else {
+    if(state.remaining.pool.length<1){ alert('추첨할 참가자가 없습니다.'); return; }
+    spinning=true; document.getElementById('spinBtn').disabled=true;
+    const w1=pickRandom(state.remaining.pool);
+    animateReel('reel1Strip', state.remaining.pool, w1, SPIN_DURATION);
+    playTicks(SPIN_DURATION);
+    setTimeout(()=>{ finishDraw([w1]); spinning=false; }, SPIN_DURATION+150);
+  }
+}
+
+function animateReel(stripId, pool, winner, duration){
+  const strip = document.getElementById(stripId);
+  if(!strip) return;
+  let seq = [];
+  for(let i=0;i<4;i++) seq.push(...shuffle(pool));
+  seq.push(winner);
+  strip.style.transition='none'; strip.style.transform='translateY(0)';
+  strip.innerHTML = seq.map(n=>`<div class="reel-item">${escapeHtml(n)}</div>`).join('');
+  void strip.offsetHeight;
+  const targetY = -((seq.length-1)*ITEM_H);
+  requestAnimationFrame(()=>{
+    strip.style.transition = `transform ${duration}ms cubic-bezier(0.14,0.65,0.1,1)`;
+    strip.style.transform = `translateY(${targetY}px)`;
+  });
+}
+
+function finishDraw(members){
+  const teamId = state.teams.length+1;
+  state.teams.push({ id:teamId, members });
+  const mode = drawMode();
+  if(mode==='tiered'){
+    state.remaining.tier1 = state.remaining.tier1.filter(n=>n!==members[0]);
+    state.remaining.tier2 = state.remaining.tier2.filter(n=>n!==members[1]);
+  } else {
+    members.forEach(m=>{ state.remaining.pool = state.remaining.pool.filter(n=>n!==m); });
+  }
+  saveState(); renderDraw(); showWinModal(teamId, members);
+}
+
+function autoMatchRemaining(){
+  const need = state.config.teamCount - state.teams.length;
+  if(need<=0) return;
+  const mode = drawMode();
+  if(mode==='tiered'){
+    if(state.remaining.tier1.length===0 || state.remaining.tier2.length===0){ alert('남은 참가자가 없습니다.'); return; }
+    const r1=shuffle(state.remaining.tier1), r2=shuffle(state.remaining.tier2);
+    const n=Math.min(r1.length, r2.length, need);
+    for(let i=0;i<n;i++) state.teams.push({ id:state.teams.length+1, members:[r1[i], r2[i]] });
+    state.remaining.tier1 = state.remaining.tier1.filter(x=>!r1.slice(0,n).includes(x));
+    state.remaining.tier2 = state.remaining.tier2.filter(x=>!r2.slice(0,n).includes(x));
+  } else if(mode==='randomDuo'){
+    if(state.remaining.pool.length<2){ alert('남은 참가자가 없습니다.'); return; }
+    const pool=shuffle(state.remaining.pool);
+    const n=Math.min(Math.floor(pool.length/2), need);
+    for(let i=0;i<n;i++) state.teams.push({ id:state.teams.length+1, members:[pool[i*2], pool[i*2+1]] });
+    const used=pool.slice(0,n*2);
+    state.remaining.pool = state.remaining.pool.filter(x=>!used.includes(x));
+  } else {
+    if(state.remaining.pool.length===0){ alert('남은 참가자가 없습니다.'); return; }
+    const pool=shuffle(state.remaining.pool);
+    const n=Math.min(pool.length, need);
+    for(let i=0;i<n;i++) state.teams.push({ id:state.teams.length+1, members:[pool[i]] });
+    const used=pool.slice(0,n);
+    state.remaining.pool = state.remaining.pool.filter(x=>!used.includes(x));
+  }
+  saveState(); renderDraw(); burstConfetti(); playFanfare();
+}
+
+function showWinModal(teamId, members){
+  document.getElementById('winModalTitle').textContent = `Team ${teamId} 매칭 완료!`;
+  const icons = ['🥇','🥈','🥉','🏅'];
+  document.getElementById('winModalBody').innerHTML = members.map((m,i)=>`<div class="${i===0?'cyan-text':'gold-text'} mt-1">${icons[i]||'🏅'} ${escapeHtml(m)}</div>`).join('');
+  document.getElementById('winModalBackdrop').style.display='flex';
+  burstConfetti(); playFanfare();
+  setTimeout(()=>{ closeWinModal(); }, 2200);
+}
+function closeWinModal(){ document.getElementById('winModalBackdrop').style.display='none'; }
+
+function goToScoreboard(){
+  if(state.teams.length < state.config.teamCount) return;
+  state.page='score';
+  saveState(); render();
+}
+
+/* ================= SCORE PAGE ================= */
+function teamTotal(teamId){
+  let sum=0;
+  state.config.rounds.forEach(r=>{
+    const rank = state.scores[r.id] && state.scores[r.id][teamId];
+    if(rank) sum += (r.points[rank] || 0);
+  });
+  return sum;
+}
+function teamFirstCount(teamId){
+  let c=0;
+  state.config.rounds.forEach(r=>{
+    const rank = state.scores[r.id] && state.scores[r.id][teamId];
+    if(rank===1) c++;
+  });
+  return c;
+}
+function teamRoundRanksReversed(teamId){
+  return [...state.config.rounds].reverse().map(r=>{
+    const rank = state.scores[r.id] && state.scores[r.id][teamId];
+    return rank || Infinity;
+  });
+}
+function leaderboardComparator(a,b){
+  const ta=teamTotal(a.id), tb=teamTotal(b.id);
+  if(tb!==ta) return tb-ta;
+  const fa=teamFirstCount(a.id), fb=teamFirstCount(b.id);
+  if(fb!==fa) return fb-fa;
+  const ra=teamRoundRanksReversed(a.id), rb=teamRoundRanksReversed(b.id);
+  for(let i=0;i<ra.length;i++){ if(ra[i]!==rb[i]) return ra[i]-rb[i]; }
+  return 0;
+}
+
+function ensureManualGroupDefaults(round){
+  if(!state.groups[round.id]) state.groups[round.id] = {};
+  const gm = state.groups[round.id];
+  state.teams.forEach((t,idx)=>{
+    if(!gm[t.id]) gm[t.id] = (idx % round.groupCount) + 1;
+  });
+}
+
+function computeAutoGroups(roundId){
+  const round = state.config.rounds.find(r=>r.id===roundId);
+  if(!round) return;
+  const priorRounds = state.config.rounds.filter(r=>r.id < round.id);
+  const stats = state.teams.map(t=>{
+    let total=0, firstCount=0;
+    const roundRanks=[];
+    priorRounds.forEach(r=>{
+      const rank = state.scores[r.id] && state.scores[r.id][t.id];
+      total += rank ? (r.points[rank]||0) : 0;
+      if(rank===1) firstCount++;
+      roundRanks.push(rank || Infinity);
+    });
+    return { id:t.id, total, firstCount, roundRanks };
+  });
+  stats.sort((a,b)=>{
+    if(b.total!==a.total) return b.total-a.total;
+    if(b.firstCount!==a.firstCount) return b.firstCount-a.firstCount;
+    for(let i=a.roundRanks.length-1;i>=0;i--){ if(a.roundRanks[i]!==b.roundRanks[i]) return a.roundRanks[i]-b.roundRanks[i]; }
+    return 0;
+  });
+  const gc = round.groupCount;
+  const n = stats.length;
+  const base = Math.floor(n/gc), extra = n % gc;
+  const sizes = Array(gc).fill(base);
+  for(let k=0;k<extra;k++) sizes[k]++;
+  const assignment = {};
+  let cursor=0;
+  sizes.forEach((sz, gi)=>{
+    for(let j=0;j<sz;j++){ assignment[stats[cursor].id] = gi+1; cursor++; }
+  });
+  state.groups[round.id] = assignment;
+  delete state.scores[round.id];
+  saveState(); renderScore();
+}
+
+function setGroup(roundId, teamId, g){
+  if(!state.groups[roundId]) state.groups[roundId] = {};
+  state.groups[roundId][teamId] = g;
+  saveState(); renderScore();
+}
+
+function setRank(roundId, teamId, rank){
+  const round = state.config.rounds.find(r=>r.id===roundId);
+  if(!round) return;
+  if(!state.scores[roundId]) state.scores[roundId] = {};
+  const scores = state.scores[roundId];
+  const groupMap = state.groups[roundId] || {};
+  const myGroup = round.useGroups ? groupMap[teamId] : 1;
+  Object.keys(scores).forEach(tidStr=>{
+    const tid = Number(tidStr);
+    const g = round.useGroups ? groupMap[tid] : 1;
+    if(tid!==teamId && scores[tid]===rank && g===myGroup) delete scores[tid];
+  });
+  if(scores[teamId]===rank) delete scores[teamId]; else scores[teamId]=rank;
+  saveState(); renderScore();
+}
+
+function teamLabel(t){ return `T${t.id} · ${t.members.map(escapeHtml).join(' / ')}`; }
+
+function renderRoundPanel(round){
+  const rankCount = rankCountForRound(round);
+  const rankBtnClass = (r)=> r===1?'sel-1':r===2?'sel-2':r===3?'sel-3':'sel-other';
+
+  if(!round.useGroups){
+    const scores = state.scores[round.id] || {};
+    const teamsHtml = state.teams.map(t=>`
+      <div class="mb-2">
+        <div class="text-xs font-bold mb-1">${teamLabel(t)}</div>
+        <div class="flex flex-wrap gap-1">
+          ${Array.from({length:rankCount},(_,i)=>i+1).map(r=>`
+            <button class="rank-btn ${scores[t.id]===r?rankBtnClass(r):''}" onclick="setRank(${round.id}, ${t.id}, ${r})">${r}등 (${round.points[r]||0})</button>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+    return `
+      <div class="hex-border rounded-xl p-4">
+        <div class="text-sm font-bold mb-2">${escapeHtml(round.label)} <span class="text-xs text-gray-400">(전체 ${state.teams.length}팀 동시 진행)</span></div>
+        ${teamsHtml}
+      </div>
+    `;
+  }
+
+  let groupAssignHtml = '';
+  let groupsBodyHtml = '';
+
+  if(round.groupMode==='manual'){
+    ensureManualGroupDefaults(round);
+    const gm = state.groups[round.id];
+    groupAssignHtml = `
+      <div class="mb-3">
+        <div class="text-xs text-gray-400 mb-1">조 배정 (수동)</div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          ${state.teams.map(t=>`
+            <div class="flex items-center justify-between gap-1 px-2 py-1 rounded-lg" style="background:rgba(255,255,255,0.04);">
+              <span class="text-xs font-bold">T${t.id}</span>
+              <div class="flex gap-1 flex-wrap">
+                ${Array.from({length:round.groupCount},(_,i)=>i+1).map(g=>`
+                  <button class="btn ${gm[t.id]===g?'btn-cyan':'btn-ghost'} btn-sm" onclick="setGroup(${round.id}, ${t.id}, ${g})">${g}조</button>
+                `).join('')}
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>
+    `;
+  } else {
+    groupAssignHtml = `
+      <div class="mb-3 flex items-center justify-between flex-wrap gap-2">
+        <div class="text-xs text-gray-400">조 배정 (자동 · 이전 라운드까지 누적 순위 기준)</div>
+        <button class="btn btn-cyan btn-sm" onclick="computeAutoGroups(${round.id})">⚙ 자동 편성 실행</button>
+      </div>
+    `;
+  }
+
+  const gm = state.groups[round.id];
+  if(gm && Object.keys(gm).length){
+    const scores = state.scores[round.id] || {};
+    const tagClass = (g)=> 'g'+(((g-1)%4)+1);
+    groupsBodyHtml = `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">`;
+    for(let g=1; g<=round.groupCount; g++){
+      const teamsInGroup = state.teams.filter(t=>gm[t.id]===g);
+      groupsBodyHtml += `
+        <div class="rounded-lg p-3" style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08);">
+          <div class="group-tag ${tagClass(g)} mb-2">${g}조${round.groupMode==='auto' && round.groupCount===2 ? (g===1?' (상위)':' (하위)') : ''}</div>
+          <div class="space-y-2">
+            ${teamsInGroup.length===0 ? `<div class="text-xs text-gray-500">배정된 팀 없음</div>` : teamsInGroup.map(t=>`
+              <div>
+                <div class="text-xs font-bold mb-1">${teamLabel(t)}</div>
+                <div class="flex flex-wrap gap-1">
+                  ${Array.from({length:rankCount},(_,i)=>i+1).map(r=>`
+                    <button class="rank-btn ${scores[t.id]===r?rankBtnClass(r):''}" onclick="setRank(${round.id}, ${t.id}, ${r})">${r}등(${round.points[r]||0})</button>
+                  `).join('')}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>`;
+    }
+    groupsBodyHtml += `</div>`;
+  } else {
+    groupsBodyHtml = `<div class="text-xs text-gray-400 py-2">자동 편성 버튼을 눌러 조를 구성하세요.</div>`;
+  }
+
+  return `
+    <div class="hex-border rounded-xl p-4">
+      <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <div class="text-sm font-bold">${escapeHtml(round.label)}</div>
+        <div class="text-xs text-gray-400">${Array.from({length:rankCount},(_,i)=>i+1).map(r=>r+'등 '+(round.points[r]||0)+'점').join(' / ')}</div>
+      </div>
+      ${groupAssignHtml}
+      ${groupsBodyHtml}
+    </div>
+  `;
+}
+
+function toggleRules(){ state.rulesOpen = !state.rulesOpen; saveState(); renderScore(); }
+
+function renderScore(){
+  const el = document.getElementById('pageScore');
+  if(state.teams.length < state.config.teamCount){
+    el.innerHTML = `<div class="text-center text-gray-400 py-20">아직 모든 팀이 매칭되지 않았습니다. 추첨 탭에서 먼저 ${state.config.teamCount}팀을 모두 구성해주세요.</div>`;
+    return;
+  }
+
+  const rosterHtml = state.teams.map(t=>`
+    <div class="team-card filled text-center">
+      <div class="text-xs cyan-text font-bold">TEAM ${t.id}</div>
+      ${t.members.map((m,mi)=>`<div class="text-sm ${mi===0?'font-bold':'gold-text'} truncate">${escapeHtml(m)}</div>`).join('')}
+    </div>
+  `).join('');
+
+  const roundPanelsHtml = state.config.rounds.map(r=>renderRoundPanel(r)).join('');
+
+  const rulesText = state.config.rounds.map(r=>{
+    const rankCount = rankCountForRound(r);
+    const pts = Array.from({length:rankCount},(_,i)=>i+1).map(rk=>rk+'등 '+(r.points[rk]||0)).join(' / ');
+    return `<div><b class="cyan-text">${escapeHtml(r.label)}</b> ${r.useGroups? r.groupCount+'개 조, ' : '전체 동시, '}${pts}</div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="mb-5">
+      <div class="text-sm font-bold gold-text mb-2">팀 로스터</div>
+      <div class="grid grid-cols-4 lg:grid-cols-8 gap-2">${rosterHtml}</div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-5">
+      <div class="space-y-5">${roundPanelsHtml}</div>
+
+      <div>
+        <div class="hex-border rounded-xl p-4 sticky top-4">
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-base font-black gold-text">🏆 실시간 순위표</div>
+          </div>
+          <div id="leaderboardList"></div>
+
+          <button class="btn btn-ghost w-full mt-3 text-sm" onclick="toggleRules()">📜 대회 공식 규정 요약 ${state.rulesOpen?'▲':'▼'}</button>
+          <div id="rulesPanel" style="display:${state.rulesOpen?'block':'none'};" class="mt-3 text-xs text-gray-300 leading-relaxed space-y-2 fade-in">
+            <div><b class="cyan-text">배점</b></div>
+            ${rulesText}
+            <div class="mt-2"><b class="cyan-text">동점자 처리 순서</b><br>① 누적 총점 ② 전체 1등 횟수 ③ 마지막 라운드 순위부터 역순으로 비교</div>
+            <div><b class="cyan-text">시상</b><br>최종 순위 1~3위 상품권 지급 (🥇🥈🥉)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  renderLeaderboard();
+}
+
+function renderLeaderboard(){
+  const container = document.getElementById('leaderboardList');
+  if(!container) return;
+
+  state.teams.forEach(t=>{
+    if(!container.querySelector(`[data-team="${t.id}"]`)){
+      const row = document.createElement('div');
+      row.setAttribute('data-team', t.id);
+      row.className = 'lb-row';
+      container.appendChild(row);
+    }
+  });
+
+  const firstRects = {};
+  state.teams.forEach(t=>{
+    const r = container.querySelector(`[data-team="${t.id}"]`);
+    firstRects[t.id] = r.getBoundingClientRect();
+  });
+
+  const sorted = [...state.teams].sort(leaderboardComparator);
+
+  sorted.forEach((t, idx)=>{
+    const rowEl = container.querySelector(`[data-team="${t.id}"]`);
+    container.appendChild(rowEl);
+    const rank = idx+1;
+    const medal = rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':'';
+    rowEl.className = 'lb-row' + (rank<=3 ? ` medal-${rank}` : '');
+    const roundSummary = state.config.rounds.map(r=>{
+      const rk = state.scores[r.id] && state.scores[r.id][t.id];
+      return (r.label||'R') + ' ' + (rk ? rk+'등' : '-');
+    }).join(' · ');
+    rowEl.innerHTML = `
+      <div class="text-center font-black text-base">${medal || rank}</div>
+      <div class="min-w-0">
+        <div class="font-bold text-sm truncate">${teamLabel(t)}</div>
+        <div class="text-[11px] text-gray-400 truncate">${roundSummary} · 1등 ${teamFirstCount(t.id)}회</div>
+      </div>
+      <div class="text-center font-black gold-text text-base">${teamTotal(t.id)}점</div>
+    `;
+  });
+
+  sorted.forEach(t=>{
+    const rowEl = container.querySelector(`[data-team="${t.id}"]`);
+    const last = rowEl.getBoundingClientRect();
+    const dy = firstRects[t.id].top - last.top;
+    if(dy){
+      rowEl.style.transition='none'; rowEl.style.transform=`translateY(${dy}px)`;
+      requestAnimationFrame(()=>{
+        rowEl.style.transition='transform .45s cubic-bezier(0.2,0.8,0.2,1)';
+        rowEl.style.transform='translateY(0)';
+      });
+    }
+  });
+}
+
+render();
+</script>
+</body>
+</html>
